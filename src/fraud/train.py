@@ -3,11 +3,10 @@
 Metrics are chosen for rare-event detection: PR-AUC and a threshold picked by
 business cost, not accuracy.
 """
+import argparse
 import json
-from pathlib import Path
 
 import joblib
-import mlflow
 import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
@@ -17,14 +16,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+from src.fraud import config
 from src.fraud.data import CATEGORICAL, NUMERIC, TARGET, generate_claims
 
-MODEL_PATH = Path("models/fraud-model.joblib")
-METRICS_PATH = Path("models/metrics.json")
-
-# Business assumptions, stated openly so a reviewer can challenge them.
-COST_MISSED_FRAUD = 4000.0   # average loss when a fraudulent claim is paid
-COST_INVESTIGATION = 150.0   # cost of reviewing a claim that turns out genuine
+COST_MISSED_FRAUD = config.COST_MISSED_FRAUD
+COST_INVESTIGATION = config.COST_INVESTIGATION
 
 
 def build_pipeline(model) -> Pipeline:
@@ -79,6 +75,8 @@ def run(n: int = 5000, seed: int = 42, log_to_mlflow: bool = True) -> dict:
     }
 
     if log_to_mlflow:
+        import mlflow  # imported lazily so the API image does not need it
+
         mlflow.set_tracking_uri("sqlite:///mlflow.db")
         mlflow.set_experiment("claims-fraud")
 
@@ -95,14 +93,16 @@ def run(n: int = 5000, seed: int = 42, log_to_mlflow: bool = True) -> dict:
 
     # Champion is chosen on expected business cost, not on a single ranking metric.
     champion = min(results, key=lambda k: results[k]["expected_cost"])
-    MODEL_PATH.parent.mkdir(exist_ok=True)
+    config.MODEL_PATH.parent.mkdir(exist_ok=True)
     joblib.dump({"pipeline": fitted[champion], "threshold": results[champion]["threshold"],
-                 "name": champion}, MODEL_PATH)
+                 "name": champion}, config.MODEL_PATH)
     summary = {"champion": champion, "results": results}
-    METRICS_PATH.write_text(json.dumps(summary, indent=2))
+    config.METRICS_PATH.write_text(json.dumps(summary, indent=2))
     return summary
 
 
 if __name__ == "__main__":
-    out = run()
-    print(json.dumps(out, indent=2))
+    parser = argparse.ArgumentParser(description="Train and compare fraud models")
+    parser.add_argument("--no-mlflow", action="store_true", help="skip MLflow logging")
+    args = parser.parse_args()
+    print(json.dumps(run(log_to_mlflow=not args.no_mlflow), indent=2))

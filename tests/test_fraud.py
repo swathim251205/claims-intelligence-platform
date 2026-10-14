@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.fraud.data import NUMERIC, CATEGORICAL, TARGET, generate_claims
-from src.fraud import train
+from src.fraud import config, train
 from src.fraud.predict import risk_band
 
 
@@ -19,8 +19,8 @@ def test_data_is_reproducible():
 
 
 def test_training_beats_base_rate(tmp_path, monkeypatch):
-    monkeypatch.setattr(train, "MODEL_PATH", tmp_path / "m.joblib")
-    monkeypatch.setattr(train, "METRICS_PATH", tmp_path / "m.json")
+    monkeypatch.setattr(config, "MODEL_PATH", tmp_path / "m.joblib")
+    monkeypatch.setattr(config, "METRICS_PATH", tmp_path / "m.json")
     out = train.run(n=4000, log_to_mlflow=False)
     best = out["results"][out["champion"]]
     assert best["pr_auc"] > 2 * best["base_rate"]
@@ -41,8 +41,8 @@ def test_risk_band_ordering():
 
 
 def test_champion_is_lowest_cost(tmp_path, monkeypatch):
-    monkeypatch.setattr(train, "MODEL_PATH", tmp_path / "m.joblib")
-    monkeypatch.setattr(train, "METRICS_PATH", tmp_path / "m.json")
+    monkeypatch.setattr(config, "MODEL_PATH", tmp_path / "m.joblib")
+    monkeypatch.setattr(config, "METRICS_PATH", tmp_path / "m.json")
     out = train.run(n=4000, log_to_mlflow=False)
     costs = {k: v["expected_cost"] for k, v in out["results"].items()}
     assert out["champion"] == min(costs, key=costs.get)

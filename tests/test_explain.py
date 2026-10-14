@@ -1,29 +1,34 @@
-import joblib
-import pytest
-
-from src.fraud import train, predict
-from src.fraud.data import generate_claims, NUMERIC, CATEGORICAL
+from src.fraud import predict
+from src.fraud.data import CATEGORICAL, NUMERIC, generate_claims
 from src.fraud.explain import explain_claim
 
 
-@pytest.fixture
-def trained(tmp_path, monkeypatch):
-    path = tmp_path / "m.joblib"
-    monkeypatch.setattr(train, "MODEL_PATH", path)
-    monkeypatch.setattr(train, "METRICS_PATH", tmp_path / "m.json")
-    train.run(n=4000, log_to_mlflow=False)
-    predict.load_model.cache_clear()
-    monkeypatch.setattr(predict, "load_model", lambda: joblib.load(path))
-    return path
-
-
-def test_scoring_and_explanation(trained, monkeypatch):
-    import src.fraud.explain as explain_module
-    monkeypatch.setattr(explain_module, "load_model", lambda: joblib.load(trained))
+def test_scoring_and_explanation(trained_model):
     claim = generate_claims(n=10, seed=3).iloc[0][NUMERIC + CATEGORICAL].to_dict()
     result = predict.score_claim(claim)
     assert 0.0 <= result["fraud_probability"] <= 1.0
     assert result["risk_band"] in {"LOW", "MEDIUM", "HIGH"}
-    reasons = explain_module.explain_claim(claim)
+    reasons = explain_claim(claim)
     assert isinstance(reasons, list)
     assert all({"feature", "impact", "direction"} <= set(r) for r in reasons)
+
+
+def test_linear_model_explanations_are_not_empty():
+    """The logistic baseline must also produce reasons, whichever model wins."""
+    from src.fraud import train
+    from src.fraud.data import TARGET
+    df = generate_claims(n=3000, seed=5)
+    pipe = train.build_pipeline(
+        train.LogisticRegression(max_iter=1000, class_weight="balanced")
+    ).fit(df[NUMERIC + CATEGORICAL], df[TARGET])
+    predict._CACHE["linear-test"] = {"pipeline": pipe, "threshold": 0.5, "name": "logistic-baseline"}
+    try:
+        original = predict.load_model
+        predict.load_model = lambda path=None: predict._CACHE["linear-test"]
+        claim = df.iloc[0][NUMERIC + CATEGORICAL].to_dict()
+        reasons = explain_claim(claim)
+        assert len(reasons) == 5
+        assert {r["direction"] for r in reasons} <= {"raises risk", "lowers risk"}
+    finally:
+        predict.load_model = original
+        predict._CACHE.pop("linear-test", None)

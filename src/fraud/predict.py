@@ -1,16 +1,23 @@
 """Load the saved champion model and score a single claim."""
-from functools import lru_cache
-
 import joblib
 import pandas as pd
 
+from src.fraud import config
 from src.fraud.data import CATEGORICAL, NUMERIC
-from src.fraud.train import MODEL_PATH
+
+_CACHE: dict = {}
 
 
-@lru_cache(maxsize=1)
-def load_model(path: str = str(MODEL_PATH)) -> dict:
-    return joblib.load(path)
+def load_model(path=None) -> dict:
+    """Load the model bundle once per path. Raises FileNotFoundError if absent."""
+    key = str(path or config.MODEL_PATH)
+    if key not in _CACHE:
+        _CACHE[key] = joblib.load(key)
+    return _CACHE[key]
+
+
+def clear_cache() -> None:
+    _CACHE.clear()
 
 
 def risk_band(p: float, threshold: float) -> str:
