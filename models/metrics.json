@@ -1,0 +1,23 @@
+{
+  "champion": "logistic-baseline",
+  "results": {
+    "logistic-baseline": {
+      "pr_auc": 0.3626874596744155,
+      "roc_auc": 0.8177565442420623,
+      "threshold": 0.5,
+      "precision": 0.14912280701754385,
+      "recall": 0.75,
+      "expected_cost": 111650.0,
+      "base_rate": 0.0544
+    },
+    "random-forest": {
+      "pr_auc": 0.3429905790051178,
+      "roc_auc": 0.807654026077436,
+      "threshold": 0.19,
+      "precision": 0.1311881188118812,
+      "recall": 0.7794117647058824,
+      "expected_cost": 112650.0,
+      "base_rate": 0.0544
+    }
+  }
+}
